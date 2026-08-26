@@ -1,0 +1,48 @@
+{
+  "kind": "AgentTask",
+  "taskId": "task.synthetic.001",
+  "runId": "run.synthetic.001",
+  "rootRunId": "run.synthetic.001",
+  "executionGeneration": 0,
+  "capability": "fake.execute",
+  "inputSchema": {
+    "componentName": "anvilkit.contract.schema.problem-details",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "artifactInputs": [
+    {
+      "artifactId": "artifact.synthetic.001",
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "mediaType": "application/json",
+      "sizeBytes": 128
+    }
+  ],
+  "parameters": {
+    "mode": "synthetic"
+  },
+  "resources": {
+    "resourceClass": "interactive-cpu",
+    "priority": 100
+  },
+  "limits": {
+    "timeoutMilliseconds": 60000,
+    "memoryBytes": 67108864,
+    "cpuMillis": 60000,
+    "gpuMillis": 0,
+    "outputBytes": 1048576
+  },
+  "idempotency": {
+    "scope": "task.synthetic.001:execute",
+    "key": "idem.task.001",
+    "canonicalRequestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "traceContext": {
+    "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+  },
+  "contractBomReference": {
+    "repository": "anvilkit/contracts",
+    "bomDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ociManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "evidenceManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  }
+}
