@@ -1,0 +1,97 @@
+# Deployment descriptor for the page-change-manager Agent Runtime Unit.
+#
+# Owns the turn decision for a page-change run and is the only Page agent allowed to delegate.
+#
+# This descriptor is the unit's own. Changing it redeploys, rescales, or rolls
+# back page-change-manager and nothing else: not the other Page agent, not Agent Service,
+# not Studio, not Pagix. That independence is the point of the split.
+#
+# The image is pinned by digest at release time. A tag would let the running
+# image change without a release, and a result could then be attributed to a
+# binding that never produced it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: page-change-manager
+  labels:
+    app.kubernetes.io/name: page-change-manager
+    anvilkit.dev/runtime-unit: page-change-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: page-change-manager
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Never take capacity away during a rollout: in-flight runs stay pinned
+      # to the image that started them and must be allowed to finish.
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: page-change-manager
+        anvilkit.dev/runtime-unit: page-change-manager
+    spec:
+      # This unit's own workload identity. Two agents never share one: a shared
+      # identity would make their access indistinguishable in an audit.
+      serviceAccountName: anvilkit-page-change-manager
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      # The drain window matches the manifest's release.drainSeconds, so how
+      # long a pod is given to finish is a released decision.
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: page-change-manager
+          image: REPLACED_AT_RELEASE_BY_DIGEST
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          env:
+            - name: ANVILKIT_RUNTIME_MANIFEST
+              value: /etc/anvilkit/runtime-manifest.json
+            - name: ANVILKIT_MODEL_GATEWAY
+              valueFrom: {configMapKeyRef: {name: anvilkit-runtime, key: modelGateway}}
+            - name: ANVILKIT_RESULT_SIGNING_KEY
+              valueFrom: {secretKeyRef: {name: page-change-manager-result-signing, key: seed}}
+          resources:
+            requests: {cpu: 2000m, memory: 1Gi}
+            limits: {cpu: 2000m, memory: 1Gi}
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8080}
+          readinessProbe:
+            # Readiness goes false as soon as a drain starts, so the control
+            # plane stops routing new tasks here while accepted ones finish.
+            httpGet: {path: /readyz, port: 8080}
+            periodSeconds: 2
+          volumeMounts:
+            - name: runtime-manifest
+              mountPath: /etc/anvilkit
+              readOnly: true
+      volumes:
+        - name: runtime-manifest
+          configMap:
+            # Produced by this unit's release pipeline with the image,
+            # provenance, and protocol digests actually deployed.
+            name: page-change-manager-runtime-manifest
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: page-change-manager
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: page-change-manager
+  minReplicas: 1
+  maxReplicas: 8
+  metrics:
+    - type: Pods
+      pods:
+        metric: {name: anvilkit_agent_runtime_page_change_manager_inflight_tasks}
+        target: {type: AverageValue, averageValue: "4"}
