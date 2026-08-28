@@ -54,10 +54,17 @@ spec:
           env:
             - name: ANVILKIT_RUNTIME_MANIFEST
               value: /etc/anvilkit/runtime-manifest.json
-            - name: ANVILKIT_MODEL_GATEWAY
-              valueFrom: {configMapKeyRef: {name: anvilkit-runtime, key: modelGateway}}
+            - name: ANVILKIT_CONTROL_PLANE
+              valueFrom: {configMapKeyRef: {name: anvilkit-runtime, key: controlPlane}}
             - name: ANVILKIT_RESULT_SIGNING_KEY
               valueFrom: {secretKeyRef: {name: page-candidate-specialist-result-signing, key: seed}}
+            # The operator-distributed trust root this unit admits task
+            # credentials against. It is mounted rather than fetched: material
+            # the unit could retrieve from the control plane would be material
+            # the control plane could change to admit whatever it liked, and a
+            # unit that verified against that would be verifying nothing.
+            - name: ANVILKIT_TASK_CREDENTIAL_TRUST_ROOT
+              value: /etc/anvilkit/trust/task-credential-trust-root.json
           resources:
             requests: {cpu: 4000m, memory: 2Gi}
             limits: {cpu: 4000m, memory: 2Gi}
@@ -72,12 +79,21 @@ spec:
             - name: runtime-manifest
               mountPath: /etc/anvilkit
               readOnly: true
+            - name: task-credential-trust
+              mountPath: /etc/anvilkit/trust
+              readOnly: true
       volumes:
         - name: runtime-manifest
           configMap:
             # Produced by this unit's release pipeline with the image,
             # provenance, and protocol digests actually deployed.
             name: page-candidate-specialist-runtime-manifest
+        - name: task-credential-trust
+          configMap:
+            # Distributed by the operator, independently of Agent Service. The
+            # service that mints credentials must not also decide which keys are
+            # trusted to mint them.
+            name: anvilkit-task-credential-trust
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler

@@ -1,0 +1,75 @@
+# Workload identity and network boundary for the page-candidate-specialist
+# Agent Runtime Unit.
+#
+# The identity is the unit's own — no Page agent shares one, and none shares
+# the Agent Service's. A shared identity would make their access
+# indistinguishable in an audit, and an audit that cannot attribute access is
+# an audit of nothing.
+#
+# The network boundary is least privilege stated as policy rather than
+# convention: the unit answers dispatch from the control plane, asks the
+# control plane for its released routes (including artifact submission — the
+# artifact store itself is never a destination), resolves names, and emits
+# telemetry. Everything else — peers, provider endpoints, storage, the other
+# unit — is unreachable by construction, matching the manifest's declared
+# "deny-all-except-allowed-endpoints" posture.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: anvilkit-page-candidate-specialist
+  labels:
+    app.kubernetes.io/name: page-candidate-specialist
+    anvilkit.dev/runtime-unit: page-candidate-specialist
+# The unit never speaks to the Kubernetes API; a mounted token would be
+# standing credential for an access nothing legitimate performs.
+automountServiceAccountToken: false
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: page-candidate-specialist
+  labels:
+    app.kubernetes.io/name: page-candidate-specialist
+    anvilkit.dev/runtime-unit: page-candidate-specialist
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: page-candidate-specialist
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Only the control plane dispatches tasks. Admission still verifies every
+    # credential — the network rule is a boundary, not the authentication.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agent-service
+      ports:
+        - {protocol: TCP, port: 8080}
+  egress:
+    # The governed control-plane origin: model invocations, artifact grants,
+    # artifact submission, and contract-runtime invocations are released
+    # routes on it, never separate addresses.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agent-service
+      ports:
+        - {protocol: TCP, port: 8080}
+    # Cluster DNS, to resolve the control-plane origin.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    # Telemetry export to the collector.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: otel-collector
+      ports:
+        - {protocol: TCP, port: 4318}

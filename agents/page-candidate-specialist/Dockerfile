@@ -5,7 +5,7 @@
 # scaled, and rolled back on its own.
 FROM golang:1.26 AS build
 WORKDIR /src
-COPY go.mod ./
+COPY go.mod go.sum ./
 COPY contracts ./contracts
 COPY runtime ./runtime
 COPY agents/page-candidate-specialist ./agents/page-candidate-specialist
