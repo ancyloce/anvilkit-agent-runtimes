@@ -3,7 +3,24 @@
   "taskId": "task.synthetic.001",
   "runId": "run.synthetic.001",
   "rootRunId": "run.synthetic.001",
+  "physicalAttemptId": "attempt.synthetic.001",
+  "attemptNumber": 1,
   "executionGeneration": 0,
+  "leaseEpoch": 0,
+  "fenceToken": "fence.synthetic.0001",
+  "expiresAt": "2026-08-27T12:00:00.000Z",
+  "definition": {
+    "definitionId": "definition.synthetic.001",
+    "definitionDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "runtimeBinding": {
+    "runtimeUnitId": "agent.synthetic.001",
+    "runtimeManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "runtimeImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "invocationProtocolDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtimeAudience": "urn:anvilkit:audience:runtime-page-change-manager"
+  },
+  "authorizationAudience": "urn:anvilkit:audience:runtime-page-change-manager",
   "capability": "fake.execute",
   "inputSchema": {
     "componentName": "anvilkit.contract.schema.problem-details",

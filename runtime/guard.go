@@ -16,37 +16,88 @@ import (
 	"strings"
 )
 
+// The governed control-plane paths of the canonical runtime boundary. They are
+// named here rather than composed by callers so that no Agent can assemble a
+// destination: every path a unit may reach is a constant, and reaching it still
+// requires the unit's own manifest to have been released with it.
+const (
+	// PathModelInvocations is the governed Model Gateway. It is the only place
+	// a prompt may go, and the runtime never learns which provider serves it.
+	PathModelInvocations = "/v1/internal/runtime/model-invocations"
+	// PathRuntimeArtifacts is the controlled artifact interface. A runtime
+	// writes what it produced through it and receives an immutable reference
+	// back; it never reaches storage and never mints an artifact identity.
+	PathRuntimeArtifacts = "/v1/internal/runtime/artifacts"
+	// PathArtifactContentGrants is the controlled read path for one artifact's
+	// bytes, bounded and expiring.
+	PathArtifactContentGrants = "/v1/internal/runtime/artifact-content-grants"
+	// PathContractRuntimeInvocations is the deterministic Contract Runtime,
+	// offered to a runtime as a controlled tool rather than as an executor.
+	PathContractRuntimeInvocations = "/v1/internal/runtime/contract-runtime-invocations"
+)
+
 // Boundary is the closed set of destinations one runtime unit may reach.
 //
 // It is built from the unit's pinned AgentRuntimeManifest and never from
 // configuration a running Agent can influence: an Agent that could name its own
 // destination could select an endpoint, and endpoint selection is the control
 // plane's decision.
+//
+// There is one origin and a closed set of released paths. That shape is the
+// enforcement: a destination is reachable only if the deployment mounted the
+// origin and the release named the path, so no combination of Agent behaviour
+// produces a new one.
 type Boundary struct {
-	// modelGateway is the single governed model destination. It is the only
-	// place a runtime may send prompts.
-	modelGateway string
-	// controlPlane is the exact set of read-only control-plane paths this unit
-	// was released with. Anything outside it is refused.
-	controlPlane map[string]struct{}
+	// controlPlane is the single origin every governed destination is resolved
+	// against. It carries no path of its own: the path always comes from the
+	// released set below.
+	controlPlane string
+	// released is the exact set of control-plane paths this unit was released
+	// with. Anything outside it is refused.
+	released map[string]struct{}
 }
 
 // NewBoundary builds the closed destination set for one runtime unit.
-func NewBoundary(modelGateway string, allowedControlPlaneEndpoints []string) (*Boundary, error) {
-	if strings.TrimSpace(modelGateway) == "" {
-		return nil, fmt.Errorf("agent runtime boundary: a governed model gateway is required")
+//
+// controlPlane is the origin of the Agent Service runtime boundary; the
+// endpoints are the paths the unit's own manifest was released with.
+func NewBoundary(controlPlane string, allowedControlPlaneEndpoints []string) (*Boundary, error) {
+	origin, err := normalizeOrigin(controlPlane)
+	if err != nil {
+		return nil, err
 	}
-	if _, err := url.Parse(modelGateway); err != nil {
-		return nil, fmt.Errorf("agent runtime boundary: model gateway is not a usable destination: %w", err)
-	}
-	allowed := make(map[string]struct{}, len(allowedControlPlaneEndpoints))
+	released := make(map[string]struct{}, len(allowedControlPlaneEndpoints))
 	for _, endpoint := range allowedControlPlaneEndpoints {
 		if !strings.HasPrefix(endpoint, "/v1/") {
 			return nil, fmt.Errorf("agent runtime boundary: %q is not a control-plane path", endpoint)
 		}
-		allowed[endpoint] = struct{}{}
+		released[endpoint] = struct{}{}
 	}
-	return &Boundary{modelGateway: modelGateway, controlPlane: allowed}, nil
+	return &Boundary{controlPlane: origin, released: released}, nil
+}
+
+// normalizeOrigin proves the control-plane destination is an origin and nothing
+// more. A base carrying a path, a query, or a fragment would let a deployment
+// smuggle routing into a value the released path set is supposed to decide.
+func normalizeOrigin(controlPlane string) (string, error) {
+	trimmed := strings.TrimSpace(controlPlane)
+	if trimmed == "" {
+		return "", fmt.Errorf("agent runtime boundary: a governed control-plane origin is required")
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("agent runtime boundary: control plane is not a usable destination: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("agent runtime boundary: control plane must be an http or https origin")
+	}
+	if parsed.Host == "" {
+		return "", fmt.Errorf("agent runtime boundary: control plane names no host")
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" || strings.Trim(parsed.Path, "/") != "" {
+		return "", fmt.Errorf("agent runtime boundary: control plane must be an origin, not a route")
+	}
+	return parsed.Scheme + "://" + parsed.Host, nil
 }
 
 // Refusal names a boundary an Agent tried to cross. Each value is a rule from
@@ -81,24 +132,29 @@ type BoundaryError struct{ Refusal Refusal }
 
 func (e *BoundaryError) Error() string { return "agent runtime boundary: " + string(e.Refusal) }
 
-// AllowModelGateway reports whether a destination is the governed model
-// gateway. It is an exact match: a prefix match would let a lookalike host
-// through.
-func (b *Boundary) AllowModelGateway(destination string) error {
-	if destination != b.modelGateway {
+// Resolve turns a released control-plane path into the absolute destination for
+// it. A path this unit was not released with has no destination at all — the
+// refusal is the same whether the path is unknown to the contract or merely
+// unknown to this release, because a unit is not entitled to learn which.
+func (b *Boundary) Resolve(path string) (string, error) {
+	if err := b.AllowControlPlane(path); err != nil {
+		return "", err
+	}
+	return b.controlPlane + path, nil
+}
+
+// AllowControlPlane reports whether a control-plane path is one this unit was
+// released with. It is an exact match: a prefix match would admit a route the
+// release never named.
+func (b *Boundary) AllowControlPlane(path string) error {
+	if _, ok := b.released[path]; !ok {
 		return &BoundaryError{Refusal: RefuseUnknownDestination}
 	}
 	return nil
 }
 
-// AllowControlPlane reports whether a read-only control-plane path is one this
-// unit was released with.
-func (b *Boundary) AllowControlPlane(path string) error {
-	if _, ok := b.controlPlane[path]; !ok {
-		return &BoundaryError{Refusal: RefuseUnknownDestination}
-	}
-	return nil
-}
+// ControlPlane is the single origin this unit resolves governed paths against.
+func (b *Boundary) ControlPlane() string { return b.controlPlane }
 
 // Peer always refuses. It exists so the rule is reachable and testable rather
 // than merely documented: code that wants a peer call finds a function that
