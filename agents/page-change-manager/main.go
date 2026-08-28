@@ -42,12 +42,18 @@ func run() error {
 		return fmt.Errorf("parse runtime manifest: %w", err)
 	}
 
-	gateway := os.Getenv("ANVILKIT_MODEL_GATEWAY")
-	if gateway == "" {
-		return fmt.Errorf("ANVILKIT_MODEL_GATEWAY is required: there is no other model path")
+	// One origin, and the manifest decides which routes on it this unit may
+	// use. Splitting the two is what keeps a deployment from widening a release:
+	// the deployment says where the control plane is, and the release says what
+	// this unit is allowed to ask it for — including the governed model path,
+	// which is a released route like any other rather than a separate address a
+	// deployment could point somewhere else.
+	controlPlane := os.Getenv("ANVILKIT_CONTROL_PLANE")
+	if controlPlane == "" {
+		return fmt.Errorf("ANVILKIT_CONTROL_PLANE is required: a runtime unit reaches nothing without the governed control-plane origin")
 	}
 
-	unit, err := runtime.NewUnit(manifest, gateway)
+	unit, err := runtime.NewUnit(manifest, raw, controlPlane)
 	if err != nil {
 		return err
 	}
@@ -56,7 +62,19 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// A unit that cannot verify a task credential must not accept one. The
+	// verifier is built before the host so a deployment missing its trust root
+	// fails at start rather than on the first dispatch that reaches it.
+	verifier, err := runtime.VerifierFromEnvironment(manifest)
+	if err != nil {
+		return err
+	}
 	host, err := runtime.NewHost(unit, &managerTurn{}, signer, time.Now)
+	if err != nil {
+		return err
+	}
+
+	admission, err := runtime.NewAdmission(unit, verifier, time.Now)
 	if err != nil {
 		return err
 	}
@@ -70,5 +88,5 @@ func run() error {
 	if listen == "" {
 		listen = ":8080"
 	}
-	return runtime.Serve(host, manifest, listen)
+	return runtime.Serve(host, admission, manifest, listen)
 }
