@@ -4,15 +4,15 @@
   "description": "Vendored canonical Agent contract bindings. Generated in anvilkit-platform; do not edit here. Re-vendor and re-pin after any canonical contract change. Only the generated bindings are vendored: the profile and lock entries record which canonical material produced them, by digest, and their paths are relative to anvilkit-platform rather than to this repository.",
   "generated": {
     "path": "contracts/generated/schema/contracts.gen.go",
-    "sha256": "sha256:129737987426a9b9bdfca3e27940530321ffc29e755fe409aacd82737051e8be"
+    "sha256": "sha256:16e6440c17fee324ef1441ab61eb7a767ed0cb1ce06de82cba7f39349625c237"
   },
   "profile": {
     "sourcePath": "contracts/agent/profile/p0-kernel-profile.json",
-    "sha256": "sha256:732db5da05d7822a8ea709fafbd1c09faeb890bf78f2f357e34fd7628f772a72"
+    "sha256": "sha256:c3afa2484aa0e35c18bb070b7a46599cbe7b1a90f2446e8b9a9cbb931cff8d6b"
   },
   "lock": {
     "sourcePath": "contracts/agent/lock/contracts.lock.json",
-    "sha256": "sha256:eb9902a3a97c2d4b3ec371ff1174ab0c806f0e643b2db4cce79dbff83b6cec6e"
+    "sha256": "sha256:753605c55c0ecb37ebb6fbf6f577ee0d94dc1babca8453f25497573ffc4f26ef"
   },
   "source": "anvilkit-platform packages/contracts-go/generated (ADR-018 canonical generation)"
 }
